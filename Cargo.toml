@@ -1,0 +1,14 @@
+[package]
+name = "enigma"
+version = "0.0.1"
+authors = ["Aki tUomi <cmouse@cmouse.fi>"]
+publish = false
+
+[[bin]]
+name = "enigma"
+test = false
+bench = false
+path = "src/enigma.rs"
+
+[dependencies]
+yaml-rust = "0.4"

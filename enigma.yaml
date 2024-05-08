@@ -1,0 +1,11 @@
+wheels:
+  - name: IC
+    position: 0
+  - name: IIC
+    position: 0
+  - name: IIIC
+    position: 0
+  - name: Reflector A
+    position: 0
+plugs:
+  E: Q
