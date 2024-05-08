@@ -9,17 +9,32 @@ use yaml_rust::{Yaml, YamlLoader};
 
 const ALPHA: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-static WHEELS: &'static[(&str, &str)] = &[
-  ("IC", "DMTWSILRUYQNKFEJCAZBPGXOHV"),
-  ("IIC", "HQZGPJTMOBLNCIFDYAWVEUSRKX"),
-  ("IIIC", "UQNTLSZFMREHDPXKIBVYGJCWOA"),
-  ("Reflector A", "EJMZALYXVBWFCRQUONTSPIKHGD")
+/* name, wirings, notch(es), fixed */
+static WHEELS: &'static[(&str, &str, &str, bool)] = &[
+  ("IC", "DMTWSILRUYQNKFEJCAZBPGXOHV", "Q", false),
+  ("IIC", "HQZGPJTMOBLNCIFDYAWVEUSRKX", "E", false),
+  ("IIIC", "UQNTLSZFMREHDPXKIBVYGJCWOA", "V", false),
+  ("I", "JGDQOXUSCAMIFRVTPNEWKBLZYH", "Q", false),
+  ("II", "NTZPSFBOKMWRCJDIVLAEYUXHGQ", "E", false),
+  ("III", "JVIUBHTCDYAKEQZPOSGXNRMWFL", "V", false),
+  ("IV", "ESOVPZJAYQUIRHXLNFTGKDCMWB", "J", false),
+  ("V", "VZBRGITYUPSDNHLXAWMJQOFECK", "Z", false),
+  ("VI", "JPGVOUMFYQBENHZRDKASXLICTW", "ZM", false),
+  ("VII", "NZJHGRCXMYSWBOUFAIVLPEKQDT", "ZM", false),
+  ("VIII", "FKQHTLXOCBJSPDZRAMEWNIUYGV", "ZM", false),
+
+  ("Reflector A", "EJMZALYXVBWFCRQUONTSPIKHGD", "", true),
+  ("Reflector B", "YRUHQSLDPXNGOKMIEBFZCWVJAT", "", true),
+  ("Reflector C", "FVPJIAOYEDRZXWGCTKUQSBNMHL", "", true),
+  ("Reflector B Thin", "ENKQAUYWJICOPBLMDXZVFTHRGS", "", true),
+  ("Reflector C Thin", "RDOBJNTKVEHMLFCWZAXGYIPSUQ", "", true),
 ];
 
 struct Wheel {
   _name: String,
   wiring: String,
   step: usize,
+  notch: String,
   fixed: bool,
 }
 
@@ -34,14 +49,14 @@ impl std::fmt::Display for Wheel {
 }
 
 impl Wheel {
-  pub fn new(name: &str, wiring: &str) -> Wheel {
-    return Wheel { _name: name.to_string(), wiring: wiring.to_string(), step: 0, fixed: false } ;
+  pub fn new(name: &str, wiring: &str, notch: &str, fixed: bool) -> Wheel {
+    return Wheel { _name: name.to_string(), wiring: wiring.to_string(), step: 0, notch: notch.to_string(), fixed: fixed } ;
   }
 
   pub fn by_name(name: &str) -> Result<Wheel, WheelNotFound> {
      for set in WHEELS {
        if set.0 == name {
-         return Ok(Wheel::new(name, set.1));
+         return Ok(Wheel::new(name, set.1, set.2, set.3));
        }
      }
      Err(WheelNotFound {})
@@ -74,8 +89,7 @@ impl Wheel {
 
 struct Enigma {
   wheels: Vec<Wheel>,
-  plugs_left: HashMap<char, char>,
-  plugs_right: HashMap<char, char>,
+  plugboard: HashMap<char, char>,
 }
 
 impl Enigma {
@@ -93,50 +107,75 @@ impl Enigma {
         wheel.step = pos as usize;
         self.wheels.push(wheel);
       }
-      self.wheels.last_mut().unwrap().fixed = true;
       let plugs = &doc["plugs"];
-      for p in plugs.as_hash().unwrap().iter() {
-         let a = p.0.as_str().unwrap().chars().next().unwrap();
-         let b = p.1.as_str().unwrap().chars().next().unwrap();
-         self.plugs_left.insert(a, b);
-         self.plugs_right.insert(b, a);
-      }
+      self.setup_plugboard(plugs)
    }
 
    fn new() -> Enigma {
-     return Enigma { wheels: Vec::new(), plugs_left: HashMap::new(), plugs_right: HashMap::new() };
+     return Enigma { wheels: Vec::new(), plugboard: HashMap::new() };
    }
 
-   fn plug_left(&self, c: char) -> char {
-      match self.plugs_left.get(&c) {
-        Some(new_c) => return *new_c,
-        None => return c
+    fn setup_plugboard(&mut self, plugs: &Yaml) {
+       match plugs.as_hash() {
+          Some(plugs)  => {
+            for p in plugs  {
+              let a = p.0.as_str().unwrap().chars().next().unwrap();
+              let b = p.1.as_str().unwrap().chars().next().unwrap();
+              self.plugboard.insert(a, b);
+              self.plugboard.insert(b, a); // Ensures bidirectional mapping
+           }
+         }
+         None => {},
       }
    }
 
-   fn plug_right(&self, c: char) -> char {
-      match self.plugs_right.get(&c) {
-        Some(new_c) => return *new_c,
-        None => return c
-      }
-   }
+    fn apply_plugboard(&self, c: char) -> char {
+        *self.plugboard.get(&c).unwrap_or(&c)
+    }
 
-   fn send(&mut self, mut c_in: char) -> char {
-      /* go through wheels twice */
+    fn step_wheels(&mut self) {
+      let mut step_next = true; // Rightmost rotor steps
+      let nwheels = self.wheels.len();
+      for i in 0..nwheels {
+        let wheel = &mut self.wheels[i];
+        if wheel.fixed { continue; } // Skip fixed wheels like the reflector
+
+        if step_next {
+          wheel.step = (wheel.step + 1) % ALPHA.len();
+          step_next = wheel.notch.contains(ALPHA.chars().nth(wheel.step).unwrap());
+        }
+
+        // Handle double-stepping anomaly
+        if i < nwheels - 1 && step_next && wheel.notch.contains(ALPHA.chars().nth(wheel.step).unwrap()) {
+          self.wheels[i + 1].step = (self.wheels[i + 1].step + 1) % ALPHA.len();
+        }
+      }
+    }
+
+    fn send(&mut self, mut c_in: char) -> char {
       let mut c = c_in;
       let mut wi: usize = 0;
       let mut dir = 0;
-      /* plug board */
-      c = self.plug_left(c);
+
+      self.step_wheels();
+
+      /* go through plug board */
+      c = self.apply_plugboard(c);
+
+      /* go through each loop */
       loop {
         c_in = c;
         let Some(wheel) = self.wheels.get_mut(wi) else { panic!("Wheel index {} missing", wi) };
+
         if dir == 0 {
+           /* going from stator -> reflector */
            c = wheel.send_right(c_in);
         } else {
+           /* going from reflector -> stator */
            c = wheel.send_left(c_in);
         }
 
+        /* Choose next wheel */
         if dir == 0 {
           wi += 1;
         } else {
@@ -145,38 +184,18 @@ impl Enigma {
           }
           wi -= 1;
         }
+
+        /* Reached reflector, need to use the one wheel before reflector */
         if wi >= self.wheels.len() {
           dir = 1;
           wi -= 2;
         }
       }
-      /* plug it again */
-      c = self.plug_right(c);
 
-      /* step the wheels */
-      let mut step_next = true;
-      for wheel in &mut self.wheels {
-        if wheel.fixed {
-          continue;
-        }
-        if step_next {
-          step_next = false;
-          wheel.step += 1;
-          if wheel.step >= wheel.wiring.len() {
-            wheel.step = 0;
-            step_next = true
-          }
-        }
-      }
+      /* Once more through plugboard */
+      c = self.apply_plugboard(c);
 
-      /* All rotated, reset to 0 */
-      if step_next {
-        for wheel in &mut self.wheels {
-          wheel.step = 0;
-        }
-      }
-
-      return c
+      c
    }
 
    fn reset(&mut self) {

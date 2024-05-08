@@ -1,11 +1,22 @@
 wheels:
-  - name: IC
+  - name: III
     position: 0
-  - name: IIC
+  - name: II
     position: 0
-  - name: IIIC
+  - name: I
     position: 0
-  - name: Reflector A
+  - name: VI
+    position: 0
+  - name: Reflector B Thin
     position: 0
 plugs:
-  E: Q
+  A: J
+  C: T
+  S: W
+  B: E
+  Z: L
+  Q: Y
+  M: G
+  W: O
+  D: R
+  P: P
