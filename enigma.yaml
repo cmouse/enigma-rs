@@ -1,11 +1,9 @@
 wheels:
   - name: III
-    position: 0
+    position: 19
   - name: II
-    position: 0
+    position: 3
   - name: I
-    position: 0
-  - name: VI
     position: 0
   - name: Reflector B Thin
     position: 0

@@ -42,7 +42,7 @@ struct WheelNotFound {}
 
 impl std::fmt::Display for Wheel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} at step {}", self._name, self.step)
+        write!(f, "{}-{:02}", self._name, self.step)
     }
 }
 
@@ -152,20 +152,30 @@ impl Enigma {
         *self.plugboard.get(&c).unwrap_or(&c)
     }
 
+    fn print_wheels(&self) {
+        let mut bomb = String::new();
+        for wheel in &self.wheels {
+            if !wheel.fixed {
+              bomb.push(ALPHA.chars().nth(wheel.step).unwrap());
+            }
+        }
+        println!("Wheel position: {bomb}");
+    }
+
     fn step_wheels(&mut self) {
         let mut step_next = true; // Rightmost rotor steps
         let nwheels = self.wheels.len();
         for i in 0..nwheels {
-            let wheel = &mut self.wheels[i];
-            if wheel.fixed {
+            {
+              let wheel = &mut self.wheels[i];
+              if wheel.fixed {
                 continue;
-            } // Skip fixed wheels like the reflector
+              } // Skip fixed wheels like the reflector
 
-            if step_next {
-                wheel.step = (wheel.step + 1) % ALPHA.len();
-                step_next = wheel.notch.contains(ALPHA.chars().nth(wheel.step).unwrap());
-            }
-
+              if step_next {
+                  wheel.step = (wheel.step + 1) % ALPHA.len();
+                  step_next = wheel.notch.contains(ALPHA.chars().nth(wheel.step).unwrap());
+              }
             // Handle double-stepping anomaly
             if i < nwheels - 1
                 && step_next
@@ -173,19 +183,19 @@ impl Enigma {
             {
                 self.wheels[i + 1].step = (self.wheels[i + 1].step + 1) % ALPHA.len();
             }
+            }
         }
     }
 
     fn send(&mut self, mut c_in: char) -> char {
-        let mut c = c_in;
         let mut wi: usize = 0;
         let mut dir = 0;
 
+        /* Wheel stepping happens before cipher step */
         self.step_wheels();
-
         /* go through plug board */
-        c = self.apply_plugboard(c);
-
+        let mut c = self.apply_plugboard(c_in);
+        //println!("plugboard, initial: {c_in} -> {c}");
         /* go through each loop */
         loop {
             c_in = c;
@@ -200,7 +210,7 @@ impl Enigma {
                 /* going from reflector -> stator */
                 c = wheel.send_left(c_in);
             }
-
+            //println!("wheel {wi:02}-{:02}: {c_in} -> {c}", wheel.step);
             /* Choose next wheel */
             if dir == 0 {
                 wi += 1;
@@ -219,8 +229,9 @@ impl Enigma {
         }
 
         /* Once more through plugboard */
-        c = self.apply_plugboard(c);
-
+        c_in = c;
+        c = self.apply_plugboard(c_in);
+        //println!("plugboard, final: {c_in} -> {c}");
         c
     }
 
@@ -246,6 +257,7 @@ pub fn main() {
     let mut enigma = Enigma::new();
     let args: Vec<String> = env::args().collect();
     enigma.setup(&args[2]);
+    enigma.print_wheels();
     let stdin = io::stdin();
     for line in stdin.lock().lines() {
         let cipher = enigma.encrypt(&line.unwrap());
